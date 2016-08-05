@@ -1,0 +1,10 @@
+numpy
+scipy
+pandas
+nltk
+scikit-learn
+sklearn
+bs4
+
+gensim
+pymorphy2

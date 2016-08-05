@@ -1,5 +1,6 @@
 import numpy as np
-from common import sentence_to_wordlist
+
+from utils.preprocess import text_to_wordlist
 
 NEGATE = ["aint", "arent", "cannot", "cant", "couldnt", "darent", "didnt", "doesnt",
  "ain't", "aren't", "can't", "couldn't", "daren't", "didn't", "doesn't",
@@ -30,7 +31,7 @@ def bl_score_with_negation(reviews):
     for review in reviews:
         score = 0
         inverse = False
-        for word in sentence_to_wordlist(review):
+        for word in text_to_wordlist(review):
             if word in NEGATE:
                 inverse = True
                 continue
@@ -44,19 +45,19 @@ def bl_score_with_negation(reviews):
 
 
 def bl_positive_counter(x):
-    return sum([positive_words.get(word, 0) for word in sentence_to_wordlist(x)])
+    return sum([positive_words.get(word, 0) for word in text_to_wordlist(x)])
 
 
 def bl_negative_counter(x):
-    return sum([negative_words.get(word, 0) for word in sentence_to_wordlist(x)])
+    return sum([negative_words.get(word, 0) for word in text_to_wordlist(x)])
 
 
 def afinn_counter_positive(x):
-    return sum(map(lambda word: afinn.get(word, 0) if afinn.get(word, 0) > 0 else 0, sentence_to_wordlist(x)))
+    return sum(map(lambda word: afinn.get(word, 0) if afinn.get(word, 0) > 0 else 0, text_to_wordlist(x)))
 
 
 def afinn_counter_negative(x):
-    return abs(sum(map(lambda word: afinn.get(word, 0) if afinn.get(word, 0) < 0 else 0, sentence_to_wordlist(x))))
+    return abs(sum(map(lambda word: afinn.get(word, 0) if afinn.get(word, 0) < 0 else 0, text_to_wordlist(x))))
 
 
 def bl_lexicon_features(reviews):

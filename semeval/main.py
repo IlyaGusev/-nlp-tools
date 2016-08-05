@@ -1,15 +1,13 @@
 import re
 import xml.etree.ElementTree as ET
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.naive_bayes import MultinomialNB
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from sklearn.preprocessing import LabelEncoder
 from nltk.corpus import stopwords
 
-
-def sentence_to_wordlist(sentence):
-    sentence = re.sub("[^а-яА-Яёa-zA-Z]"," ", sentence)
-    result = sentence.lower().split()
-    return result
+from utils.preprocess import text_to_wordlist
+from utils.bow import bow
 
 
 def semeval_get_data(filename):
@@ -40,7 +38,7 @@ def preprocess_data(data):
     # Aspects
     for sentence in data:
         text = sentence['text'].lower()
-        words = sentence_to_wordlist(text)
+        words = text_to_wordlist(text)
 
         separator_borders = []
         separators = ','
@@ -65,7 +63,7 @@ def preprocess_data(data):
                 to_idx = int(opinion['to'])
 
                 context = 5
-                target_words = sentence_to_wordlist(text[from_idx:to_idx])
+                target_words = text_to_wordlist(text[from_idx:to_idx])
                 begin = words.index(target_words[0])
                 begin = 0 if begin-context < 0 else begin-context
                 end = words.index(target_words[-1])
@@ -87,7 +85,7 @@ def preprocess_data(data):
                     if border[1] > to_idx:
                         if to_idx < border[0] < e:
                             e = border[0] - 1
-                result = sentence_to_wordlist(text[b:e+1])
+                result = text_to_wordlist(text[b:e+1])
 
             if result:
                 result = " ".join(result)
@@ -106,13 +104,6 @@ def preprocess_data(data):
     return reviews, sentiments, additional_features
 
 
-def rf_fit_predict(train_data, train_answer, test_data, n_estimators=100):
-    forest = RandomForestClassifier(n_estimators=n_estimators)
-    forest.fit(train_data, train_answer)
-    answer = forest.predict(test_data)
-    return answer
-
-
 def evaluate(test_answer, pred_answer):
     result = ""
     result += "Accuracy: " + str(accuracy_score(test_answer,  pred_answer)) + '\n'
@@ -123,14 +114,22 @@ def evaluate(test_answer, pred_answer):
     return result
 
 
-def get_stopwords(lang):
-    if lang == 'ru':
-        stop_words = stopwords.words('russian')[:50]
-        stop_words = [x for x in stop_words if x not in
-                      ['не', 'но', 'нет', 'только', 'а', 'даже']]
-        return stop_words
-    if lang == 'en':
-        stop_words = stopwords.words('english')[:50]
-        print(stop_words)
-        return stop_words
-    return []
+def main(train, test, output, stemming=True):
+    train_reviews, train_answer, train_additional_features = preprocess_data(semeval_get_data(train))
+    test_reviews, test_answer, test_additional_features = preprocess_data(semeval_get_data(test))
+
+    train_data, test_data = bow(train_reviews, test_reviews, language='ru', stem=stemming, use_tfidf=True)
+
+    nb = MultinomialNB(alpha=0.1)
+    nb.fit(train_data, train_answer)
+    answer = nb.predict(test_data)
+
+    result = evaluate(test_answer, answer)
+    with open(output, 'w') as f:
+        f.write(result)
+
+
+main('datasets/ABSA16_Restaurants_Ru_Train.xml', 'datasets/ABSA16_Restaurants_Ru_Test.xml',
+     "results/SemEval16RuRest/tfidf_baseline.log", False)
+main('datasets/ABSA16_Restaurants_Ru_Train.xml', 'datasets/ABSA16_Restaurants_Ru_Test.xml',
+     "results/SemEval16RuRest/tfidf_stemming.log", True)

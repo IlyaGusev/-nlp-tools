@@ -1,0 +1,9 @@
+*.o
+*.so
+*.pyc
+*~
+.idea
+datasets
+models
+__pycache__
+results

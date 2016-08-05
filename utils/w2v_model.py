@@ -1,14 +1,15 @@
 import re
-from nltk.tokenize import sent_tokenize
-from gensim.models import word2vec, Word2Vec
 import logging
-import common
+from gensim.models import word2vec, Word2Vec
+from nltk.tokenize import sent_tokenize
+
+from utils.preprocess import get_stopwords
 
 
-def sentence_to_wordlist(review):
+def w2v_normalize(review):
     review_text = re.sub("[^а-яА-Я]"," ", review)
     words = review_text.lower().split()
-    words = [x for x in words if x not in common.get_stopwords()]
+    words = [x for x in words if x not in get_stopwords('en')]
     return words
 
 
@@ -17,7 +18,7 @@ def line_to_sentences(line):
     sentences = []
     for raw_sentence in raw_sentences:
         if len(raw_sentence) > 0:
-            sentences.append(sentence_to_wordlist(raw_sentence))
+            sentences.append(w2v_normalize(raw_sentence))
     return sentences
 
 
@@ -43,7 +44,7 @@ def fetch(filenames):
     return all_sentences
 
 
-def train(filenames, model_name):
+def train(filenames, model_name, language='en'):
     all_sentences = fetch(filenames)
     print("Training model...")
     num_features = 300  # Word vector dimensionality
@@ -64,9 +65,14 @@ def train(filenames, model_name):
     print("Saving to: " + model_name)
     model.save(model_name)
 
+# train(["datasets/wiki_ru.txt", "datasets/reviews_restoran.txt", "datasets/train.txt", "datasets/test.txt"],
+# "models/300-40-10-1e3-wiki_ru-restoran-train16-test16-1kk")
 
-# train(["datasets/wiki_ru.txt", "datasets/reviews_restoran.txt", "datasets/train.txt", "datasets/test.txt"], "models/300-40-10-1e3-wiki_ru-restoran-train16-test16-1kk")
 
-# logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
-# model = Word2Vec.load_word2vec_format(("models/GoogleNews-vectors-negative300.bin.gz"), binary=True)
+def load(filename):
+    logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
+    model = Word2Vec.load_word2vec_format(filename, binary=True)
+    return model
+
+# load("models/GoogleNews-vectors-negative300.bin.gz")
 # print(model.similarity('woman', 'man'))
