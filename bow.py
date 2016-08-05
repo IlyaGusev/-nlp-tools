@@ -1,5 +1,6 @@
 import pandas as pd
 from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer, TfidfTransformer
 import pymorphy2
 import common
 from nltk.stem.snowball import SnowballStemmer
@@ -20,17 +21,22 @@ def stem(reviews, language):
 
 
 def bow_core(train_reviews, test_reviews, stemming=True, removing_stopwords=False, language='ru'):
-    print("Stemming...")
+    print("BOW")
+    print(" Stemming...")
     if stemming:
         train_reviews = stem(train_reviews, language)
         test_reviews = stem(test_reviews, language)
-    print("Vectorizing...")
-    vectorizer = CountVectorizer(analyzer="word", tokenizer=None, preprocessor=None,
-                                 stop_words=common.get_stopwords(language) if removing_stopwords else None,
-                                 max_features=10000)
-    vectorizer.fit(train_reviews+test_reviews)
-    train_data = vectorizer.transform(train_reviews).toarray()
-    test_data = vectorizer.transform(test_reviews).toarray()
+
+    print(" Vectorizing...")
+    vectorizer = TfidfVectorizer(analyzer='word', ngram_range=(1, 3))
+    # vectorizer = CountVectorizer(analyzer="word", tokenizer=None, preprocessor=None,
+    #                              stop_words=common.get_stopwords(language) if removing_stopwords else None,
+    #                              max_features=10000)
+
+    data = train_reviews+test_reviews
+    data = vectorizer.fit_transform(data)
+    train_data = data[:len(train_reviews)]
+    test_data = data[len(train_reviews):]
     return train_data, test_data
 
 
