@@ -1,10 +1,12 @@
-numpy
-scipy
-pandas
-nltk
-scikit-learn
-sklearn
-bs4
-
-gensim
-pymorphy2
+scrapy >= 1.1.0
+numpy >= 1.11.0
+scipy >= 0.17.1
+pandas >= 0.18.1
+nltk >= 3.2.1
+scikit-learn >= 0.17.1
+beautifulsoup4 >= 4.4.1
+pymorphy2 >= 0.8
+gensim >= 0.13.1
+theano >= 0.8.2
+keras >= 1.0.6
+h5py >= 2.6.0
