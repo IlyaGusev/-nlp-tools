@@ -1,13 +1,14 @@
-import re
 import xml.etree.ElementTree as ET
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from sklearn.preprocessing import LabelEncoder
-from nltk.corpus import stopwords
+from sklearn.feature_extraction import DictVectorizer
+from sklearn.svm import LinearSVC
+from scipy.sparse import hstack, csr_matrix
+from sklearn import cross_validation
 
 from utils.preprocess import text_to_wordlist
-from utils.bow import bow
+from utils.bow import bow, bot
 
 
 def semeval_get_data(filename):
@@ -34,7 +35,7 @@ def semeval_get_data(filename):
 def preprocess_data(data):
     reviews = []
     sentiments = []
-    additional_features = [[]]
+    categories = []
     # Aspects
     for sentence in data:
         text = sentence['text'].lower()
@@ -94,14 +95,15 @@ def preprocess_data(data):
                 if opinion['polarity'] in polarity_classes:
                     reviews.append(result)
                     sentiments.append(opinion['polarity'])
-                    additional_features[0].append(opinion['category'])
+                    categories.append({"entity": opinion['category'].split("#")[0],
+                                       "attr": opinion['category'].split("#")[1]})
 
     sent_le = LabelEncoder()
     sentiments = sent_le.fit_transform(sentiments)
     # Category
-    category_le = LabelEncoder()
-    additional_features[0] = category_le.fit_transform(additional_features[0])
-    return reviews, sentiments, additional_features
+    category_dv = DictVectorizer()
+    additional_features = category_dv.fit_transform(categories)
+    return reviews, sentiments, csr_matrix(additional_features)
 
 
 def evaluate(test_answer, pred_answer):
@@ -115,14 +117,36 @@ def evaluate(test_answer, pred_answer):
 
 
 def main(train, test, output, stemming=True):
+    print("Preprocessing...")
     train_reviews, train_answer, train_additional_features = preprocess_data(semeval_get_data(train))
     test_reviews, test_answer, test_additional_features = preprocess_data(semeval_get_data(test))
 
+    # BOW features
     train_data, test_data = bow(train_reviews, test_reviews, language='ru', stem=stemming, use_tfidf=True)
 
-    nb = MultinomialNB(alpha=0.1)
-    nb.fit(train_data, train_answer)
-    answer = nb.predict(test_data)
+    # Category features
+    train_data = hstack([train_data, train_additional_features])
+    test_data = hstack([test_data, test_additional_features])
+
+    # POS features
+    train_pos_data, test_pos_data = bot(train_reviews, test_reviews, language='ru')
+    train_data = hstack([train_data, train_pos_data])
+    test_data = hstack([test_data, test_pos_data])
+
+    # nb = MultinomialNB(alpha=0.1)
+    # nb.fit(train_data, train_answer)
+    # answer = nb.predict(test_data)
+
+    svm = LinearSVC(tol=0.1)
+
+    print("CV...")
+    cv = cross_validation.ShuffleSplit(train_data.shape[0], n_iter=8, test_size=0.125, random_state=10)
+    scores = cross_validation.cross_val_score(svm, train_data, train_answer, cv=cv)
+    print("Accuracy: %0.3f (+/- %0.3f)" % (scores.mean(), scores.std() * 2))
+
+    print("Predicting on test...")
+    svm.fit(train_data, train_answer)
+    answer = svm.predict(test_data)
 
     result = evaluate(test_answer, answer)
     with open(output, 'w') as f:
