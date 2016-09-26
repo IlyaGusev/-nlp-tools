@@ -8,8 +8,11 @@ morph_ru = MorphAnalyzer()
 morph_en = SnowballStemmer("english")
 
 
-def text_to_wordlist(sentence):
-    sentence = re.sub("[^а-яА-Яёa-zA-Z]"," ", sentence)
+def text_to_wordlist(sentence, cyrillic=False):
+    regexp = "[^а-яА-Яёa-zA-Z]"
+    if cyrillic:
+        regexp = "[^а-яА-Яё]"
+    sentence = re.sub(regexp, " ", sentence)
     result = sentence.lower().split()
     return result
 

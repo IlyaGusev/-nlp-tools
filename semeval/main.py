@@ -32,7 +32,7 @@ def semeval_get_data(filename):
     return data
 
 
-def preprocess_data(data):
+def preprocess_data(data, context_window=5):
     reviews = []
     sentiments = []
     categories = []
@@ -63,12 +63,11 @@ def preprocess_data(data):
                 from_idx = int(opinion['from'])
                 to_idx = int(opinion['to'])
 
-                context = 5
                 target_words = text_to_wordlist(text[from_idx:to_idx])
                 begin = words.index(target_words[0])
-                begin = 0 if begin-context < 0 else begin-context
+                begin = 0 if begin-context_window < 0 else begin-context_window
                 end = words.index(target_words[-1])
-                end = len(words)-1 if end+context > len(words)-1 else end+context
+                end = len(words)-1 if end+context_window > len(words)-1 else end+context_window
 
                 b = text.find(words[begin])
                 e = text.rfind(words[end]) + len(words[end]) - 1
@@ -116,20 +115,23 @@ def evaluate(test_answer, pred_answer):
     return result
 
 
-def main(train, test, output, stemming=True):
+def main(train, test, output, stemming=True, context_window=5, bow_ngrams=(1, 2), pos_ngrams=(1, 1)):
     print("Preprocessing...")
-    train_reviews, train_answer, train_additional_features = preprocess_data(semeval_get_data(train))
-    test_reviews, test_answer, test_additional_features = preprocess_data(semeval_get_data(test))
+    train_reviews, train_answer, train_additional_features = \
+        preprocess_data(semeval_get_data(train), context_window=context_window)
+    test_reviews, test_answer, test_additional_features = \
+        preprocess_data(semeval_get_data(test), context_window=context_window)
 
     # BOW features
-    train_data, test_data = bow(train_reviews, test_reviews, language='ru', stem=stemming, use_tfidf=True)
+    train_data, test_data = bow(train_reviews, test_reviews, language='ru', stem=stemming, use_tfidf=True,
+                                bow_ngrams=bow_ngrams)
 
     # Category features
     train_data = hstack([train_data, train_additional_features])
     test_data = hstack([test_data, test_additional_features])
 
     # POS features
-    train_pos_data, test_pos_data = bot(train_reviews, test_reviews, language='ru')
+    train_pos_data, test_pos_data = bot(train_reviews, test_reviews, language='ru', pos_ngrams=pos_ngrams)
     train_data = hstack([train_data, train_pos_data])
     test_data = hstack([test_data, test_pos_data])
 
@@ -153,7 +155,7 @@ def main(train, test, output, stemming=True):
         f.write(result)
 
 
+# main('datasets/ABSA16_Restaurants_Ru_Train.xml', 'datasets/ABSA16_Restaurants_Ru_Test.xml',
+#      "results/SemEval16RuRest/tfidf_baseline.log", stemming=False, context_window=7, bow_ngrams=(1, 2))
 main('datasets/ABSA16_Restaurants_Ru_Train.xml', 'datasets/ABSA16_Restaurants_Ru_Test.xml',
-     "results/SemEval16RuRest/tfidf_baseline.log", False)
-main('datasets/ABSA16_Restaurants_Ru_Train.xml', 'datasets/ABSA16_Restaurants_Ru_Test.xml',
-     "results/SemEval16RuRest/tfidf_stemming.log", True)
+     "results/SemEval16RuRest/tfidf_stemming.log", stemming=True, context_window=7, bow_ngrams=(1, 3))
