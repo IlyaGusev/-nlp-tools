@@ -142,7 +142,7 @@ def main(train, test, output, stemming=True, context_window=5, bow_ngrams=(1, 2)
     svm = LinearSVC(tol=0.1)
 
     print("CV...")
-    cv = cross_validation.ShuffleSplit(train_data.shape[0], n_iter=8, test_size=0.125, random_state=10)
+    cv = cross_validation.ShuffleSplit(train_data.shape[0], n_iter=20, test_size=0.125, random_state=10)
     scores = cross_validation.cross_val_score(svm, train_data, train_answer, cv=cv)
     print("Accuracy: %0.3f (+/- %0.3f)" % (scores.mean(), scores.std() * 2))
 
@@ -150,12 +150,17 @@ def main(train, test, output, stemming=True, context_window=5, bow_ngrams=(1, 2)
     svm.fit(train_data, train_answer)
     answer = svm.predict(test_data)
 
+    # prepare_data(train_reviews, test_reviews, train_answer, "models/semeval_cnn_data.pickle",
+    #              w2v_model="models/300-40-10-1e3-wiki_ru-restoran-train16-test16-1kk")
+    # train_model("models/semeval_cnn_data.pickle", 'models/semeval_cnn_3epochs.model', number_of_classes=3)
+    # answer = predict_answer("models/semeval_cnn_data.pickle", 'models/semeval_cnn_3epochs.model', test_answer, number_of_classes=3)
+
     result = evaluate(test_answer, answer)
     with open(output, 'w') as f:
         f.write(result)
 
 
 # main('datasets/ABSA16_Restaurants_Ru_Train.xml', 'datasets/ABSA16_Restaurants_Ru_Test.xml',
-#      "results/SemEval16RuRest/tfidf_baseline.log", stemming=False, context_window=7, bow_ngrams=(1, 2))
+#      "results/SemEval16RuRest/cnn.log", False)
 main('datasets/ABSA16_Restaurants_Ru_Train.xml', 'datasets/ABSA16_Restaurants_Ru_Test.xml',
-     "results/SemEval16RuRest/tfidf_stemming.log", stemming=True, context_window=7, bow_ngrams=(1, 3))
+     "results/SemEval16RuRest/tfidf_stemming.log", True)
