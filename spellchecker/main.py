@@ -1,8 +1,10 @@
 from utils.preprocess import text_to_wordlist
 from bs4 import BeautifulSoup
 import os
+import pickle
 from os.path import isfile, join
 from operator import itemgetter
+from spellchecker.bor import Bor
 
 
 def get_file_list(rel_dir="texts", ext=".fb2"):
@@ -35,6 +37,21 @@ def get_freq(files):
     return all_words_freq, reversed_words_freq, unique_count, count
 
 
+def build_bor(files):
+    b = Bor()
+    count = 0
+    for filename in files:
+        with open(filename, "r", encoding="utf-8", errors='ignore') as f:
+            soup = BeautifulSoup(f, 'html.parser')
+            words = text_to_wordlist(soup.get_text(), cyrillic=True)
+            for word in words:
+                b.process(word)
+                count += 1
+        print(filename + " done, " + str(count) + " words collected")
+    with open("bor_dump.pickle", "wb") as f:
+        pickle.dump(b, f)
+
+
 def dict_to_csv(d, filename):
     with open(filename, "w") as f:
         f.write("sep=,\n")
@@ -43,12 +60,13 @@ def dict_to_csv(d, filename):
 
 
 def main():
-    freqs, reversed_freqs, unique_count, count = get_freq(get_file_list("texts", ".fb2"))
-    print("Total unique words: " + str(unique_count))
-    print("Total words: " + str(count))
-
-    dict_to_csv(sorted(freqs.items(), key=itemgetter(0)), "alphabet.csv")
-    dict_to_csv(reversed(sorted(freqs.items(), key=itemgetter(1))), "freq.csv")
-    dict_to_csv([(k[::-1], v) for (k,v) in sorted(reversed_freqs.items(), key=itemgetter(0))], "reversed.csv")
+    build_bor(get_file_list("texts", ".fb2"))
+    # freqs, reversed_freqs, unique_count, count = get_freq(get_file_list("texts", ".fb2"))
+    # print("Total unique words: " + str(unique_count))
+    # print("Total words: " + str(count))
+    #
+    # dict_to_csv(sorted(freqs.items(), key=itemgetter(0)), "alphabet.csv")
+    # dict_to_csv(reversed(sorted(freqs.items(), key=itemgetter(1))), "freq.csv")
+    # dict_to_csv([(k[::-1], v) for (k,v) in sorted(reversed_freqs.items(), key=itemgetter(0))], "reversed.csv")
 
 main()
