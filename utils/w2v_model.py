@@ -71,7 +71,10 @@ def train(filenames, model_name, language='en'):
 
 def load(filename):
     logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
-    model = Word2Vec.load_word2vec_format(filename, binary=True)
+    if filename[:-6] == "bin.gz":
+        model = Word2Vec.load_word2vec_format(filename, binary=True)
+    else:
+        model = Word2Vec.load(filename)
     return model
 
 # load("models/GoogleNews-vectors-negative300.bin.gz")

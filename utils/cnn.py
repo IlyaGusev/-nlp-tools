@@ -18,16 +18,16 @@ def clean_data(data_train, data_test):
     vocab = defaultdict(float)
     # Pre-process train data set
     train_texts = []
-    for i in range(data_train.shape[0]):
-        words = text_to_wordlist(data_train['review'][i])
+    for i in range(len(data_train)):
+        words = text_to_wordlist(data_train[i])
         for word in set(words):
             vocab[word] += 1
         train_texts.append(" ".join(words))
 
     # Pre-process test data set
     test_texts = []
-    for i in range(data_test.shape[0]):
-        words = text_to_wordlist(data_test['review'][i])
+    for i in range(len(data_test)):
+        words = text_to_wordlist(data_test[i])
         for word in set(words):
             vocab[word] += 1
         test_texts.append(" ".join(words))
@@ -99,7 +99,7 @@ def make_idx_data(train_texts, test_texts, train_answer, word_idx_map, max_l=51,
     return train, test
 
 
-def assemble_model(input_dim, output_dim, conv_input_height, conv_input_width, weigths):
+def assemble_model(input_dim, output_dim, conv_input_height, conv_input_width, weigths, number_of_classes=2):
     # Number of feature maps (outputs of convolutional layer)
     N_fm = 300
     # kernel size of convolutional layer
@@ -130,7 +130,7 @@ def assemble_model(input_dim, output_dim, conv_input_height, conv_input_width, w
     model.add(Flatten())
     model.add(Dropout(0.5))
     # Inner Product layer (as in regular neural network, but without non-linear activation function)
-    model.add(Dense(2))
+    model.add(Dense(number_of_classes))
     # SoftMax activation; actually, Dense+SoftMax works as Multinomial Logistic Regression
     model.add(Activation('softmax'))
 
@@ -142,20 +142,20 @@ def assemble_model(input_dim, output_dim, conv_input_height, conv_input_width, w
     return model
 
 
-def prepare_data(train, test, filename):
+def prepare_data(train, test, train_answer, filename, w2v_model="models/GoogleNews-vectors-negative300.bin.gz"):
     train_texts, test_texts, vocab = clean_data(train, test)
 
-    vectors = load_bin_vec("models/GoogleNews-vectors-negative300.bin.gz", vocab)
+    vectors = load_bin_vec(w2v_model, vocab)
     print('word2vec loaded!')
 
     add_unknown_words(vectors, vocab)
     W, word_idx_map = get_W(vectors)
-    pickle.dump([train_texts, test_texts, train['sentiment'].tolist(), W, word_idx_map, vocab],
+    pickle.dump([train_texts, test_texts, train_answer.tolist(), W, word_idx_map, vocab],
                 open(filename, 'wb'))
     print('dataset created!')
 
 
-def train_model(data_filename, model_filename, n_epoch=3):
+def train_model(data_filename, model_filename, n_epoch=3, number_of_classes=2):
     print("loading data...")
     x = pickle.load(open(data_filename, "rb"))
     train_texts, test_texts, train_answer, W, word_idx_map, vocab = x[0], x[1], x[2], x[3], x[4], x[5]
@@ -171,14 +171,15 @@ def train_model(data_filename, model_filename, n_epoch=3):
 
     # For each word write a word index (not vector) to X tensor
     train_X = np.zeros((N, conv_input_height), dtype=np.int)
-    train_Y = np.zeros((N, 2), dtype=np.int)
+    train_Y = np.zeros((N, 3), dtype=np.int)
     for i in range(N):
         for j in range(conv_input_height):
             train_X[i, j] = train_data[i, j]
         train_Y[i, train_data[i, -1]] = 1
 
     model = assemble_model(input_dim=W.shape[0], output_dim=W.shape[1], weigths=[W],
-                           conv_input_height=conv_input_height, conv_input_width=conv_input_width)
+                           conv_input_height=conv_input_height, conv_input_width=conv_input_width,
+                           number_of_classes=number_of_classes)
     epoch = 0
     for i in range(n_epoch):
         model.fit(train_X, train_Y, batch_size=50, nb_epoch=1, verbose=1)
@@ -188,7 +189,7 @@ def train_model(data_filename, model_filename, n_epoch=3):
     model.save_weights(model_filename)
 
 
-def predict_answer(data_filename, model_filename, test_filename):
+def predict_answer(data_filename, model_filename, test_answer, number_of_classes=2):
     print("loading data...")
     x = pickle.load(open(data_filename, "rb"))
     train_texts, test_texts, train_answer, W, word_idx_map, vocab = x[0], x[1], x[2], x[3], x[4], x[5]
@@ -210,10 +211,13 @@ def predict_answer(data_filename, model_filename, test_filename):
     print('test_X.shape = {}'.format(test_X.shape))
 
     model = assemble_model(input_dim=W.shape[0], output_dim=W.shape[1], weigths=[W],
-                           conv_input_height=conv_input_height, conv_input_width=conv_input_width)
+                           conv_input_height=conv_input_height, conv_input_width=conv_input_width,
+                           number_of_classes=number_of_classes)
     model.load_weights(model_filename)
-    p = model.predict_proba(test_X, batch_size=10)
+    p = model.predict_classes(test_X, batch_size=10)
+    # model.evaluate(test_X, np.array(test_answer), batch_size=10, show_accuracy=True)
 
-    data = pd.read_csv(test_filename, sep='\t')
-    d = pd.DataFrame({'id': data['id'], 'sentiment': p[:, 0]})
-    d.to_csv('results/cnn_3epochs.csv', index=False)
+    return p
+    # data = pd.read_csv(test_filename, sep='\t')
+    # d = pd.DataFrame({'id': data['id'], 'sentiment': p[:, 0]})
+    # d.to_csv('results/cnn_3epochs.csv', index=False)
