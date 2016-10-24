@@ -59,8 +59,35 @@ def dict_to_csv(d, filename):
             f.write(k+","+str(v)+"\n")
 
 
+def build_ngrams():
+    ngrams = set()
+    with open("alphabet.csv", "r") as f:
+        content = f.readlines()[1:]
+        words = [line.split(',')[0] for line in content]
+        for word in words:
+            word = "#" + word + "#"
+            for i in range(len(word)-2):
+                ngrams.add(word[i:i+3])
+    count = 0
+    with open("texts/VK_test.txt", "r", encoding="utf-8") as f:
+        with open("answer.txt", "w", encoding="utf-8") as o:
+            words = text_to_wordlist(f.read(), cyrillic=True)
+            for word in words:
+                flag = False
+                word = "#" + word + "#"
+                for i in range(len(word)-2):
+                    ngram = word[i:i+3]
+                    if ngram not in ngrams:
+                        flag = True
+                        o.write(word + " "+ngram + "\n")
+                if flag:
+                    count += 1
+    print(count)
+
+
 def main():
-    build_bor(get_file_list("texts", ".fb2"))
+    build_ngrams()
+    # build_bor(get_file_list("texts", ".fb2"))
     # freqs, reversed_freqs, unique_count, count = get_freq(get_file_list("texts", ".fb2"))
     # print("Total unique words: " + str(unique_count))
     # print("Total words: " + str(count))

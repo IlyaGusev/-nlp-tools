@@ -1,22 +1,18 @@
 import xml.etree.ElementTree as ET
-import pandas as pd
 import re
-from sklearn.naive_bayes import MultinomialNB
+import random
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from sklearn.preprocessing import LabelEncoder
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.svm import LinearSVC
 from scipy.sparse import hstack, csr_matrix
-from sklearn import cross_validation
-from sklearn.ensemble import ExtraTreesClassifier
-from sklearn.feature_selection import SelectFromModel
 
+from sklearn.model_selection import ShuffleSplit, cross_val_score
 from utils.preprocess import text_to_wordlist, get_sentence_tags
+from utils.rules import punctuation_features
 from utils.bow import bow
 
-
-def list_rindex(alist, value):
-    return len(alist) - alist[-1::-1].index(value) -1
+random.seed(2016)
 
 
 def semeval_get_data(filename):
@@ -48,6 +44,7 @@ def semeval_get_data(filename):
 
 def preprocess_data(data, nlc_filename, nlc_meta_filename, context_window=5):
     reviews = []
+    raw_reviews = []
     sentiments = []
     categories = []
     metas = []
@@ -83,8 +80,6 @@ def preprocess_data(data, nlc_filename, nlc_meta_filename, context_window=5):
             to_idx = int(opinion['to'])
 
             if opinion['target'] != 'NULL':
-                target_words = text_to_wordlist(text[from_idx:to_idx])
-
                 words_borders = []
                 word_begin = -1
                 word_end = -1
@@ -98,6 +93,8 @@ def preprocess_data(data, nlc_filename, nlc_meta_filename, context_window=5):
                             words_borders.append((word_begin, word_end))
                         word_begin = -1
                         word_end = -1
+                if word_begin != -1:
+                    words_borders.append((word_begin, word_end))
                 begin = -1
                 end = -1
                 for i in range(len(words_borders)):
@@ -109,8 +106,8 @@ def preprocess_data(data, nlc_filename, nlc_meta_filename, context_window=5):
                 begin = 0 if begin-context_window < 0 else begin-context_window
                 end = len(words)-1 if end+context_window > len(words)-1 else end+context_window
 
-                b = text.find(words[begin])
-                e = text.rfind(words[end]) + len(words[end]) - 1
+                b = words_borders[begin][0]
+                e = words_borders[end][1]
                 for border in separator_borders:
                     if from_idx >= border[0] and to_idx <= border[1]:
                         if border[0] > b:
@@ -126,21 +123,22 @@ def preprocess_data(data, nlc_filename, nlc_meta_filename, context_window=5):
                         if to_idx < border[0] < e:
                             e = border[0] - 1
                 result = text_to_wordlist(text[b:e+1])
+                raw_reviews.append(text[b:e+1])
             else:
                 to_idx += len(sentence['text']) + 1
+                raw_reviews.append(text)
 
-            if result:
-                result = " ".join(result)
-                # Polarity
-                polarity_classes = ['negative', 'neutral', 'positive']
-                if opinion['polarity'] in polarity_classes:
-                    reviews.append(result)
-                    metas.append({'rid': int(sentence['rid']), 'words': result, 'start': current_length+from_idx,
-                                 'end': current_length+to_idx, 'answer': polarity_classes.index(opinion['polarity']),
-                                  'isNull': opinion['target'] == 'NULL'})
-                    sentiments.append(opinion['polarity'])
-                    categories.append({"entity": opinion['category'].split("#")[0],
-                                       "attr": opinion['category'].split("#")[1]})
+            result = " ".join(result)
+            # Polarity
+            polarity_classes = ['negative', 'neutral', 'positive']
+            if opinion['polarity'] in polarity_classes:
+                reviews.append(result)
+                metas.append({'rid': int(sentence['rid']), 'words': result, 'start': current_length+from_idx,
+                             'end': current_length+to_idx, 'answer': polarity_classes.index(opinion['polarity']),
+                              'isNull': opinion['target'] == 'NULL'})
+                sentiments.append(opinion['polarity'])
+                categories.append({"entity": opinion['category'].split("#")[0],
+                                   "attr": opinion['category'].split("#")[1]})
         current_length += len(sentence['text']) + 1
 
     nlc_data = []
@@ -148,28 +146,27 @@ def preprocess_data(data, nlc_filename, nlc_meta_filename, context_window=5):
         nlc_data = [(" ".join(line.strip().split("; ")[1:])).replace(":", "0000") for line in f.readlines()]
 
     shuffle_order = []
-    with open(nlc_meta_filename) as meta_file:
+    with open(nlc_meta_filename, encoding='utf-8') as meta_file:
         content = meta_file.readlines()
         for line in content:
-            nlc_meta = dict()
-            nlc_meta['word'] = " ".join(text_to_wordlist(re.search(r'#.*""', line).group(0)[1:][:-2]))
-            nlc_meta['rid'] = int(re.search(r'""[0-9]*#', line).group(0)[2:][:-1])
-            nlc_meta['answer'] = int(re.search(r';[0-2];', line[-10:]).group(0)[1:][:-1])
             link = re.search(r'markupText\/[0-9\/]*""', line).group(0).split("/")
-            nlc_meta['end'] = int(link[-1][:-2])
-            nlc_meta['start'] = int(link[-2])
+            nlc_end = int(link[-1][:-2])
+            nlc_start = int(link[-2])
+            nlc_rid = int(re.search(r'""[0-9]*#', line).group(0)[2:][:-1])
             flag = False
             for i in range(len(metas)):
                 meta = metas[i]
-                if meta['rid'] == nlc_meta['rid']:
-                    if abs(nlc_meta['start'] - meta['start']) <= 1 and abs(nlc_meta['end'] - meta['end']) <=1:
+                if meta['rid'] == nlc_rid:
+                    if abs(nlc_start - meta['start']) <= 1 and abs(nlc_end - meta['end']) <= 1:
                         shuffle_order.append(i)
                         flag = True
                         break
             if not flag:
-                print("ERRROR ON: " + str(nlc_meta))
+                nlc_word = " ".join(text_to_wordlist(re.search(r'#.*""', line).group(0)[1:][:-2]))
+                print("ERRROR ON: " + str(nlc_rid) + " " + nlc_word)
 
     reviews = [reviews[i] for i in shuffle_order]
+    raw_reviews = [raw_reviews[i] for i in shuffle_order]
     sentiments = [sentiments[i] for i in shuffle_order]
     categories = [categories[i] for i in shuffle_order]
 
@@ -181,16 +178,7 @@ def preprocess_data(data, nlc_filename, nlc_meta_filename, context_window=5):
     category_dv = DictVectorizer()
     additional_features = category_dv.fit_transform(categories)
 
-    return reviews, sentiments, csr_matrix(additional_features), nlc_data
-
-
-def feature_selection(train_data, test_data, train_answer):
-    clf = ExtraTreesClassifier()
-    clf = clf.fit(train_data, train_answer)
-    model = SelectFromModel(clf, prefit=True)
-    train_data = model.transform(train_data)
-    test_data = model.transform(test_data)
-    return train_data, test_data
+    return reviews, sentiments, additional_features, nlc_data, raw_reviews
 
 
 def evaluate(test_answer, pred_answer):
@@ -205,73 +193,73 @@ def evaluate(test_answer, pred_answer):
 
 def main(train, test, output, stemming=True, context_window=5, bow_ngrams=(1, 2), pos_ngrams=(1, 1), language='ru'):
     print("Preprocessing...")
-    train_reviews, train_answer, train_additional_features, nlc_train_data = \
+    train_reviews, train_answer, train_additional_features, nlc_train_data, raw_train_reviews = \
         preprocess_data(semeval_get_data(train),
-                        "datasets/ABSA16_Restaurants_Ru_Train_NLC.csv",
-                        "datasets/ABSA16_Restaurants_Ru_Train_NLC_Meta.csv",
+                        "D:\Projects\OntoTechnology\Statistics\AspectSentiement\Configs\SemEval2016\sentiment.train.csv",
+                        "D:\Projects\OntoTechnology\Statistics\AspectSentiement\Configs\SemEval2016\sentiment.train.samples.csv",
                         context_window=context_window)
-    test_reviews, test_answer, test_additional_features, nlc_test_data = \
+    test_reviews, test_answer, test_additional_features, nlc_test_data, raw_test_reviews = \
         preprocess_data(semeval_get_data(test),
-                        "datasets/ABSA16_Restaurants_Ru_Test_NLC.csv",
-                        "datasets/ABSA16_Restaurants_Ru_Test_NLC_Meta.csv",
+                        "D:\Projects\OntoTechnology\Statistics\AspectSentiement\Configs\SemEval2016\sentiment.test.csv",
+                        "D:\Projects\OntoTechnology\Statistics\AspectSentiement\Configs\SemEval2016\sentiment.test.samples.csv",
                         context_window=context_window)
+
+    train_data = csr_matrix((len(train_reviews), 1))
+    test_data = csr_matrix((len(test_reviews), 1))
+
+    # TfIdf
+    print("TfIdf...")
+    bow_train_data, bow_test_data = bow(train_reviews, test_reviews, language='ru', stem=stemming, use_tfidf=True,
+                                        bow_ngrams=bow_ngrams)
+    train_data = hstack([train_data, bow_train_data])
+    test_data = hstack([test_data, bow_test_data])
+
+    # POS features
+    print("POS...")
     pos_train_data = []
     pos_test_data = []
     for review in train_reviews:
         pos_train_data.append(get_sentence_tags(review, language))
     for review in test_reviews:
         pos_test_data.append(get_sentence_tags(review, language))
-
-    # BOW features
-    train_data, test_data = bow(train_reviews, test_reviews, language='ru', stem=stemming, use_tfidf=True,
-                                bow_ngrams=bow_ngrams)
-    # BOW on pos features
     pos_train_data, pos_test_data = bow(pos_train_data, pos_test_data, language='ru', stem=False, use_tfidf=False,
                                         bow_ngrams=pos_ngrams)
-    # BOW on NLC raw features
-    nlc_train_data, nlc_test_data = bow(nlc_train_data, nlc_test_data, language='ru', stem=False, use_tfidf=False,
-                                        tokenizer=None, bow_ngrams=(1, 1))
+    train_data = hstack([train_data, pos_train_data])
+    test_data = hstack([test_data, pos_test_data])
+
+    # # Punctuation
+    # print("Punctuation...")
+    # punct_train_data = punctuation_features(raw_train_reviews)
+    # punct_test_data = punctuation_features(raw_test_reviews)
+    # train_data = hstack([train_data,  punct_train_data])
+    # test_data = hstack([test_data,  punct_test_data])
 
     # Category features
+    print("Category...")
     train_data = hstack([train_data, train_additional_features])
     test_data = hstack([test_data, test_additional_features])
 
     # # NLC
-    # nlc_train_data, nlc_test_data = feature_selection(nlc_train_data, nlc_test_data, train_answer)
+    # print("NLC...")
+    # nlc_train_data, nlc_test_data = bow(nlc_train_data, nlc_test_data, language='ru', stem=False, use_tfidf=False,
+    #                                     tokenizer=None, bow_ngrams=(1, 1))
     # train_data = hstack([train_data, nlc_train_data])
     # test_data = hstack([test_data, nlc_test_data])
 
-    # POS features
-    pos_train_data, pos_test_data = feature_selection(pos_train_data, pos_test_data, train_answer)
-    train_data = hstack([train_data, pos_train_data])
-    test_data = hstack([test_data, pos_test_data])
-
-
-    #nb = MultinomialNB(alpha=0.1)
-    svm = LinearSVC(tol=0.1)
+    clf = LinearSVC(tol=0.1)
 
     print("CV...")
-    cv = cross_validation.ShuffleSplit(train_data.shape[0], n_iter=20, test_size=0.2, random_state=10)
-    scores = cross_validation.cross_val_score(svm, train_data, train_answer, cv=cv)
+    cv = ShuffleSplit(train_data.shape[0], n_iter=20, test_size=0.25, random_state=10)
+    scores = cross_val_score(clf, train_data, train_answer, cv=cv)
     print("Accuracy: %0.3f (+/- %0.3f)" % (scores.mean(), scores.std() * 2))
 
     print("Predicting on test...")
-    svm.fit(train_data, train_answer)
-    answer = svm.predict(test_data)
-    # nb.fit(train_data, train_answer)
-    # answer = nb.predict(test_data)
-
-    # prepare_data(train_reviews, test_reviews, train_answer, "models/semeval_cnn_data.pickle",
-    #              w2v_model="models/300-40-10-1e3-wiki_ru-restoran-train16-test16-1kk")
-    # train_model("models/semeval_cnn_data.pickle", 'models/semeval_cnn_3epochs.model', number_of_classes=3)
-    # answer = predict_answer("models/semeval_cnn_data.pickle", 'models/semeval_cnn_3epochs.model', test_answer, number_of_classes=3)
+    clf.fit(train_data, train_answer)
+    answer = clf.predict(test_data)
 
     result = evaluate(test_answer, answer)
     with open(output, 'w') as f:
         f.write(result)
 
-
-# main('datasets/ABSA16_Restaurants_Ru_Train.xml', 'datasets/ABSA16_Restaurants_Ru_Test.xml',
-#      "results/SemEval16RuRest/tfidf_baseline.log", False, context_window=7)
 main('datasets/ABSA16_Restaurants_Ru_Train.xml', 'datasets/ABSA16_Restaurants_Ru_Test.xml',
-     "results/SemEval16RuRest/tfidf_stemming_pos_selected_tree.log", True, context_window=7)
+     "results/SemEval16RuRest/tfidf_stemming_pos_7.log", True, context_window=7)

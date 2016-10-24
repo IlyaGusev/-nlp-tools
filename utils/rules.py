@@ -1,6 +1,6 @@
 import numpy as np
 
-PUNC_LIST = ["!", "?", "!!", "!!!", "??", "???", "?!?", "!?!", "?!?!", "!?!?"]
+PUNC_LIST = ["?!?", "!?!", '))', ')))', '((', '(((', ':)', ':(']
 
 
 def punctuation_features(sentences):

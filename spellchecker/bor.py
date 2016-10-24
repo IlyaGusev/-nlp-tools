@@ -1,6 +1,7 @@
 import pickle
 import pandas as pd
 import struct
+from utils.preprocess import text_to_wordlist
 
 
 class BorNode:
@@ -24,6 +25,14 @@ class Bor:
             current = current.children[word[i]]
             if i == len(word) - 1:
                 current.increment()
+
+    def check(self, word):
+        current = self.root
+        for i in range(len(word)):
+            if current.children.get(word[i]) is None:
+                return False
+            current = current.children[word[i]]
+        return True
 
     def serialize(self, file):
         current = self.root
@@ -50,20 +59,37 @@ class Bor:
         return size, info
 
 
-def main():
+def check_spelling():
     b = Bor()
-    b.process("cat")
-    b.process("cahis")
-    b.process("dog")
-    b.process("cat")
-    with open("bor_dump.my", "wb") as f:
-        b.serialize(f)
-    p = Bor()
-    with open("bor_dump.my", "rb") as f:
-        p.deserialize(f)
+    count = 0
+    with open("bor_dump.pickle", "rb") as f:
+         b = pickle.load(f)
+    with open("texts/VK_test.txt", "r", encoding="utf-8") as f:
+        with open("answer_bor.txt", "w", encoding="utf-8") as o:
+            words = text_to_wordlist(f.read(), cyrillic=True)
+            unique = set()
+            for word in words:
+                if not b.check(word):
+                    unique.add(word)
+            for word in unique:
+                o.write(word + "\n")
+
+
+def main():
+    check_spelling()
+    # b = Bor()
+    # b.process("cat")
+    # b.process("cahis")
+    # b.process("dog")
+    # b.process("cat")
+    # with open("bor_dump.my", "wb") as f:
+    #     b.serialize(f)
+    # p = Bor()
+    # with open("bor_dump.my", "rb") as f:
+    #     p.deserialize(f)
 
     # with open("bor_dump.pickle", "wb") as f:
     #     pickle.dump(b, f)
-    print(b.root.children['c'].children['a'].children['t'].frequency)
+    # print(b.root.children['c'].children['a'].children['t'].frequency)
 
 main()
