@@ -11,6 +11,7 @@ from sklearn.model_selection import ShuffleSplit, cross_val_score
 from utils.preprocess import text_to_wordlist, get_sentence_tags
 from utils.rules import punctuation_features
 from utils.bow import bow
+from utils.boosting import run_single
 
 random.seed(2016)
 
@@ -169,6 +170,10 @@ def preprocess_data(data, nlc_filename, nlc_meta_filename, context_window=5):
     raw_reviews = [raw_reviews[i] for i in shuffle_order]
     sentiments = [sentiments[i] for i in shuffle_order]
     categories = [categories[i] for i in shuffle_order]
+    count = {"positive":0, "negative":0, "neutral":0}
+    for sentiment in sentiments:
+        count[sentiment] += 1
+    print(count)
 
     # Sentiment encoding
     sent_le = LabelEncoder()
@@ -195,13 +200,13 @@ def main(train, test, output, stemming=True, context_window=5, bow_ngrams=(1, 2)
     print("Preprocessing...")
     train_reviews, train_answer, train_additional_features, nlc_train_data, raw_train_reviews = \
         preprocess_data(semeval_get_data(train),
-                        "D:\Projects\OntoTechnology\Statistics\AspectSentiement\Configs\SemEval2016\sentiment.train.csv",
-                        "D:\Projects\OntoTechnology\Statistics\AspectSentiement\Configs\SemEval2016\sentiment.train.samples.csv",
+                        "datasets/ABSA16_Restaurants_Ru_Train_NLC.csv",
+                        "datasets/ABSA16_Restaurants_Ru_Train_NLC_Meta.csv",
                         context_window=context_window)
     test_reviews, test_answer, test_additional_features, nlc_test_data, raw_test_reviews = \
         preprocess_data(semeval_get_data(test),
-                        "D:\Projects\OntoTechnology\Statistics\AspectSentiement\Configs\SemEval2016\sentiment.test.csv",
-                        "D:\Projects\OntoTechnology\Statistics\AspectSentiement\Configs\SemEval2016\sentiment.test.samples.csv",
+                        "datasets/ABSA16_Restaurants_Ru_Test_NLC.csv",
+                        "datasets/ABSA16_Restaurants_Ru_Test_NLC_Meta.csv",
                         context_window=context_window)
 
     train_data = csr_matrix((len(train_reviews), 1))
@@ -222,7 +227,7 @@ def main(train, test, output, stemming=True, context_window=5, bow_ngrams=(1, 2)
         pos_train_data.append(get_sentence_tags(review, language))
     for review in test_reviews:
         pos_test_data.append(get_sentence_tags(review, language))
-    pos_train_data, pos_test_data = bow(pos_train_data, pos_test_data, language='ru', stem=False, use_tfidf=False,
+    pos_train_data, pos_test_data = bow(pos_train_data, pos_test_data, stem=False, use_tfidf=False,
                                         bow_ngrams=pos_ngrams)
     train_data = hstack([train_data, pos_train_data])
     test_data = hstack([test_data, pos_test_data])
@@ -241,25 +246,26 @@ def main(train, test, output, stemming=True, context_window=5, bow_ngrams=(1, 2)
 
     # # NLC
     # print("NLC...")
-    # nlc_train_data, nlc_test_data = bow(nlc_train_data, nlc_test_data, language='ru', stem=False, use_tfidf=False,
+    # nlc_train_data, nlc_test_data = bow(nlc_train_data, nlc_test_data, stem=False, use_tfidf=False,
     #                                     tokenizer=None, bow_ngrams=(1, 1))
     # train_data = hstack([train_data, nlc_train_data])
     # test_data = hstack([test_data, nlc_test_data])
 
-    clf = LinearSVC(tol=0.1)
-
-    print("CV...")
-    cv = ShuffleSplit(train_data.shape[0], n_iter=20, test_size=0.25, random_state=10)
-    scores = cross_val_score(clf, train_data, train_answer, cv=cv)
-    print("Accuracy: %0.3f (+/- %0.3f)" % (scores.mean(), scores.std() * 2))
-
-    print("Predicting on test...")
-    clf.fit(train_data, train_answer)
-    answer = clf.predict(test_data)
+    answer = run_single(train_data, test_data, train_answer, 201600)
+    # clf = LinearSVC(tol=0.1)
+    #
+    # print("CV...")
+    # cv = ShuffleSplit(train_data.shape[0], n_iter=20, test_size=0.25, random_state=10)
+    # scores = cross_val_score(clf, train_data, train_answer, cv=cv)
+    # print("Accuracy: %0.3f (+/- %0.3f)" % (scores.mean(), scores.std() * 2))
+    #
+    # print("Predicting on test...")
+    # clf.fit(train_data, train_answer)
+    # answer = clf.predict(test_data)
 
     result = evaluate(test_answer, answer)
     with open(output, 'w') as f:
         f.write(result)
 
 main('datasets/ABSA16_Restaurants_Ru_Train.xml', 'datasets/ABSA16_Restaurants_Ru_Test.xml',
-     "results/SemEval16RuRest/tfidf_stemming_pos_7.log", True, context_window=7)
+     "results/SemEval16RuRest/boosting.log", True, context_window=7)

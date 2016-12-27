@@ -1,10 +1,8 @@
 import json
 import re
-from scipy.sparse import hstack, csr_matrix
 from utils.preprocess import text_to_wordlist
-from utils.bow import bow
-from sklearn.svm import SVR, LinearSVR
-from sklearn.model_selection import ShuffleSplit, cross_val_score
+from utils.pipeline import BowStep, CVStep, Pipeline
+from sklearn.svm import LinearSVR
 
 
 def process_microblogs(filename):
@@ -17,25 +15,15 @@ def process_microblogs(filename):
             re.sub(r"\$[a-zA-Z0-9]+", "", (" ".join(obj['spans'])))
         )) for obj in train if obj['spans'][0] != ""]
 
-        train_data = csr_matrix((len(train_texts), 1))
-        test_data = csr_matrix((0, 1))
-
-        # Word ngrams
-        word_train_data, word_test_data = bow(train_texts, [], language='en', stem=True, tokenizer=None,
-                                              preprocessor=None, use_tfidf=True, max_features=None, bow_ngrams=(1, 2))
-        train_data = hstack([train_data, word_train_data])
-
-        # Char ngrams
-        char_train_data, char_test_data = bow(train_texts, [], language='en', stem=False, tokenizer=None,
-                                              preprocessor=None, use_tfidf=True, max_features=None, bow_ngrams=(3, 4),
-                                              analyzer='char')
-        train_data = hstack([train_data, char_train_data])
-
-        # Cross-validation
-        clf = LinearSVR()
-        cv = ShuffleSplit(20, test_size=0.2, random_state=10)
-        cv_scores = cross_val_score(clf, train_data, scores, cv=cv, scoring='neg_mean_squared_error')
-        print("Microblogs: Accuracy: %0.3f (+/- %0.3f)" % (cv_scores.mean(), cv_scores.std() * 2))
+        pipeline = Pipeline(train_texts, [])
+        pipeline.add_step(BowStep(language='en', stem=True, tokenizer=None, preprocessor=None,
+                                  use_tfidf=True, max_features=None, bow_ngrams=(1, 2)))
+        pipeline.add_step(BowStep(language='en', stem=False, tokenizer=None,
+                                  preprocessor=None, use_tfidf=True, max_features=None, bow_ngrams=(3, 4),
+                                  analyzer='char'))
+        pipeline.add_step(CVStep(scores, LinearSVR(), n=20, test_size=0.2,
+                                 random_state=2016, scoring='neg_mean_squared_error'))
+        pipeline.run()
 
 
 def process_headlines(filename):
@@ -54,22 +42,17 @@ def process_headlines(filename):
                 train_texts[i] = train_texts[i].replace(company, "")
         train_texts = [" ".join(text_to_wordlist(re.sub(r"\$[a-zA-Z0-9]+", "", text))) for text in train_texts]
 
-        train_data = csr_matrix((len(train_texts), 1))
-        test_data = csr_matrix((0, 1))
-
-        # Word ngrams
-        word_train_data, word_test_data = bow(train_texts, [], language='en', stem=True, tokenizer=None,
-                                              preprocessor=None, use_tfidf=True, max_features=None, bow_ngrams=(1, 2))
-        train_data = hstack([train_data, word_train_data])
-
-        # Cross-validation
-        clf = LinearSVR()
-        cv = ShuffleSplit(20, test_size=0.2, random_state=10)
-        cv_scores = cross_val_score(clf, train_data, scores, cv=cv, scoring='neg_mean_squared_error')
-        print("Headlines: Accuracy: %0.3f (+/- %0.3f)" % (cv_scores.mean(), cv_scores.std() * 2))
+        pipeline = Pipeline(train_texts, [])
+        pipeline.add_step(BowStep(language='en', stem=True, tokenizer=None, preprocessor=None,
+                                  use_tfidf=True, max_features=None, bow_ngrams=(1, 2)))
+        pipeline.add_step(CVStep(scores, LinearSVR(), n=20, test_size=0.2,
+                                 random_state=2016, scoring='neg_mean_squared_error'))
+        pipeline.run()
 
 
 def main():
     process_microblogs("datasets/Microblog_Train.json.txt")
     process_headlines("datasets/Headline_Train.json.txt")
-main()
+
+if __name__ == '__main__':
+    main()
