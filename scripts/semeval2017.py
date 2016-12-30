@@ -1,7 +1,7 @@
 import json
 import re
 from utils.preprocess import text_to_wordlist
-from utils.pipeline import BowFeaturesStep, CVStep, Pipeline
+from utils.clf_pipeline import BowFeaturesStep, CVStep, Pipeline
 from sklearn.svm import LinearSVR
 
 

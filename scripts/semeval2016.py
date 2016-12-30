@@ -1,12 +1,13 @@
-import re
 import random
+import re
 import xml.etree.ElementTree as ET
-from sklearn.preprocessing import LabelEncoder
+
 from sklearn.feature_extraction import DictVectorizer
+from sklearn.preprocessing import LabelEncoder
 from sklearn.svm import LinearSVC
-from utils.rules import punctuation_features
-from utils.boosting import run_single
-from utils.pipeline import Pipeline, BowFeaturesStep, POSFeaturesStep, RawFeaturesStep, CVStep, EvaluateFMeasureStep
+
+from utils.clf_pipeline import Pipeline, BowFeaturesStep, POSFeaturesStep, RawFeaturesStep, CVStep, \
+    EvaluateFMeasureStep
 from utils.preprocess import text_to_wordlist
 
 random.seed(2016)
@@ -182,15 +183,15 @@ def preprocess_data(data, nlc_filename, nlc_meta_filename, context_window=5):
     return reviews, sentiments, additional_features, nlc_data, raw_reviews
 
 
-def main(train, test, output, stemming=True, context_window=5, bow_ngrams=(1, 2), pos_ngrams=(1, 1), language='ru'):
+def main(train_filename, test_filename, stemming=True, context_window=5, bow_ngrams=(1, 2), pos_ngrams=(1, 1)):
     print("Preprocessing...")
     train_reviews, train_answer, train_additional_features, nlc_train_data, raw_train_reviews = \
-        preprocess_data(semeval_get_data(train),
+        preprocess_data(semeval_get_data(train_filename),
                         "datasets/ABSA16_Restaurants_Ru_Train_NLC.csv",
                         "datasets/ABSA16_Restaurants_Ru_Train_NLC_Meta.csv",
                         context_window=context_window)
     test_reviews, test_answer, test_additional_features, nlc_test_data, raw_test_reviews = \
-        preprocess_data(semeval_get_data(test),
+        preprocess_data(semeval_get_data(test_filename),
                         "datasets/ABSA16_Restaurants_Ru_Test_NLC.csv",
                         "datasets/ABSA16_Restaurants_Ru_Test_NLC_Meta.csv",
                         context_window=context_window)
@@ -206,13 +207,6 @@ def main(train, test, output, stemming=True, context_window=5, bow_ngrams=(1, 2)
     pipeline.add_step(EvaluateFMeasureStep(clf, train_answer, test_answer))
     pipeline.run()
 
-    # # Punctuation
-    # print("Punctuation...")
-    # punct_train_data = punctuation_features(raw_train_reviews)
-    # punct_test_data = punctuation_features(raw_test_reviews)
-    # train_data = hstack([train_data,  punct_train_data])
-    # test_data = hstack([test_data,  punct_test_data])
-
     # # NLC
     # print("NLC...")
     # nlc_train_data, nlc_test_data = bow(nlc_train_data, nlc_test_data, stem=False, use_tfidf=False,
@@ -222,5 +216,5 @@ def main(train, test, output, stemming=True, context_window=5, bow_ngrams=(1, 2)
 
     # answer = run_single(train_data, test_data, train_answer, 201600)
 
-main('datasets/ABSA16_Restaurants_Ru_Train.xml', 'datasets/ABSA16_Restaurants_Ru_Test.xml',
-     "results/SemEval16RuRest/boosting.log", True, context_window=7)
+if __name__ == '__main__':
+    main('datasets/ABSA16_Restaurants_Ru_Train.xml', 'datasets/ABSA16_Restaurants_Ru_Test.xml', True, context_window=7)

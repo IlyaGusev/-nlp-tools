@@ -1,17 +1,17 @@
-import numpy as np
-import pandas as pd
 import pickle
 from collections import defaultdict
-from keras.models import Sequential
+
+import numpy as np
+from keras.constraints import unitnorm
+from keras.layers.convolutional import Convolution2D, MaxPooling2D
 from keras.layers.core import Dense, Dropout, Activation, Flatten, Reshape
 from keras.layers.embeddings import Embedding
-from keras.layers.convolutional import Convolution2D, MaxPooling2D
+from keras.models import Sequential
 from keras.optimizers import Adadelta
-from keras.constraints import unitnorm
 from keras.regularizers import l2
 
+from utils.classifiers.w2v_model import load
 from utils.preprocess import text_to_wordlist
-from utils.w2v_model import load
 
 
 def clean_data(data_train, data_test):

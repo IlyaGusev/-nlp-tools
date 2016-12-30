@@ -1,9 +1,11 @@
+import pandas as pd
 from scipy.sparse import hstack, csr_matrix
-from sklearn.model_selection import ShuffleSplit, cross_val_score
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+from sklearn.model_selection import ShuffleSplit, cross_val_score
 
+from utils.features.bow import bow
+from utils.features.punctuation import punctuation_features
 from utils.preprocess import text_to_wordlist, get_sentence_tags
-from utils.bow import bow
 
 
 def concat(len_train, len_test, train_data, test_data, train_new, test_new):
@@ -64,6 +66,18 @@ class POSFeaturesStep(object):
         return concat(len(init_train_data), len(init_test_data), train_data, test_data, pos_train_data, pos_test_data)
 
 
+class PunctuationStep(object):
+    def __init__(self, punctuation_items):
+        self.punctuation_items = punctuation_items
+
+    def run(self, init_train_data, init_test_data, train_data, test_data):
+        print("Punctuation step...")
+        punctuation_train_data = punctuation_features(init_train_data, self.punctuation_items)
+        punctuation_test_data = punctuation_features(init_test_data, self.punctuation_items)
+        return concat(len(init_train_data), len(init_test_data), train_data, test_data,
+                      punctuation_train_data, punctuation_test_data)
+
+
 class RawFeaturesStep(object):
     def __init__(self, train_features, test_features):
         self.train_features = train_features
@@ -109,6 +123,22 @@ class EvaluateFMeasureStep(object):
         return train_data, test_data
 
 
+class OutputStep(object):
+    def __init__(self, clf, output_filename, train_answer, test_id):
+        self.clf = clf
+        self.output_filename = output_filename
+        self.train_answer = train_answer
+        self.test_id = test_id
+
+    def run(self, init_train_data, init_test_data, train_data, test_data):
+        print("Classifying...")
+        self.clf.fit(train_data, self.train_answer)
+        answer = self.clf.predict(test_data)
+        output = pd.DataFrame(data={"id": self.test_id, "sentiment": answer})
+        output.to_csv(self.output_filename, index=False, quoting=3)
+        return train_data, test_data
+
+
 class Pipeline(object):
     def __init__(self, train_data, test_data):
         self.steps = []
@@ -124,5 +154,3 @@ class Pipeline(object):
 
     def add_step(self, step):
         self.steps.append(step)
-
-

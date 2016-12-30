@@ -3,7 +3,7 @@ import pandas as pd
 from gensim.models import Word2Vec
 from sklearn.cluster import KMeans
 
-from utils.w2v_model import load
+from utils.classifiers.w2v_model import load
 
 
 def average_vector(words, model, num_features):

@@ -1,10 +1,8 @@
 import numpy as np
 
-PUNC_LIST = ["?!?", "!?!", '))', ')))', '((', '(((', ':)', ':(']
 
-
-def punctuation_features(sentences):
+def punctuation_features(sentences, punctuation_items):
     features = []
-    for punct in PUNC_LIST:
+    for punct in punctuation_items:
         features.append([int(punct in sentence) for sentence in sentences])
     return np.transpose(features)

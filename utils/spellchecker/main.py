@@ -1,10 +1,11 @@
-from utils.preprocess import text_to_wordlist
-from bs4 import BeautifulSoup
 import os
 import pickle
 from os.path import isfile, join
-from operator import itemgetter
-from spellchecker.bor import Bor
+
+from bs4 import BeautifulSoup
+
+from utils.preprocess import text_to_wordlist
+from utils.spellchecker import Bor
 
 
 def get_file_list(rel_dir="texts", ext=".fb2"):
