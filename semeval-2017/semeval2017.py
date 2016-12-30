@@ -1,7 +1,7 @@
 import json
 import re
 from utils.preprocess import text_to_wordlist
-from utils.pipeline import BowStep, CVStep, Pipeline
+from utils.pipeline import BowFeaturesStep, CVStep, Pipeline
 from sklearn.svm import LinearSVR
 
 
@@ -16,11 +16,11 @@ def process_microblogs(filename):
         )) for obj in train if obj['spans'][0] != ""]
 
         pipeline = Pipeline(train_texts, [])
-        pipeline.add_step(BowStep(language='en', stem=True, tokenizer=None, preprocessor=None,
-                                  use_tfidf=True, max_features=None, bow_ngrams=(1, 2)))
-        pipeline.add_step(BowStep(language='en', stem=False, tokenizer=None,
-                                  preprocessor=None, use_tfidf=True, max_features=None, bow_ngrams=(3, 4),
-                                  analyzer='char'))
+        pipeline.add_step(BowFeaturesStep(language='en', stem=True, tokenizer=None, preprocessor=None,
+                                          use_tfidf=True, max_features=None, bow_ngrams=(1, 2)))
+        pipeline.add_step(BowFeaturesStep(language='en', stem=False, tokenizer=None,
+                                          preprocessor=None, use_tfidf=True, max_features=None, bow_ngrams=(3, 4),
+                                          analyzer='char'))
         pipeline.add_step(CVStep(scores, LinearSVR(), n=20, test_size=0.2,
                                  random_state=2016, scoring='neg_mean_squared_error'))
         pipeline.run()
@@ -43,8 +43,8 @@ def process_headlines(filename):
         train_texts = [" ".join(text_to_wordlist(re.sub(r"\$[a-zA-Z0-9]+", "", text))) for text in train_texts]
 
         pipeline = Pipeline(train_texts, [])
-        pipeline.add_step(BowStep(language='en', stem=True, tokenizer=None, preprocessor=None,
-                                  use_tfidf=True, max_features=None, bow_ngrams=(1, 2)))
+        pipeline.add_step(BowFeaturesStep(language='en', stem=True, tokenizer=None, preprocessor=None,
+                                          use_tfidf=True, max_features=None, bow_ngrams=(1, 2)))
         pipeline.add_step(CVStep(scores, LinearSVR(), n=20, test_size=0.2,
                                  random_state=2016, scoring='neg_mean_squared_error'))
         pipeline.run()

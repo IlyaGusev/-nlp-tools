@@ -1,17 +1,13 @@
-import xml.etree.ElementTree as ET
 import re
 import random
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+import xml.etree.ElementTree as ET
 from sklearn.preprocessing import LabelEncoder
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.svm import LinearSVC
-from scipy.sparse import hstack, csr_matrix
-
-from sklearn.model_selection import ShuffleSplit, cross_val_score
-from utils.preprocess import text_to_wordlist, get_sentence_tags
 from utils.rules import punctuation_features
-from utils.bow import bow
 from utils.boosting import run_single
+from utils.pipeline import Pipeline, BowFeaturesStep, POSFeaturesStep, RawFeaturesStep, CVStep, EvaluateFMeasureStep
+from utils.preprocess import text_to_wordlist
 
 random.seed(2016)
 
@@ -186,16 +182,6 @@ def preprocess_data(data, nlc_filename, nlc_meta_filename, context_window=5):
     return reviews, sentiments, additional_features, nlc_data, raw_reviews
 
 
-def evaluate(test_answer, pred_answer):
-    result = ""
-    result += "Accuracy: " + str(accuracy_score(test_answer,  pred_answer)) + '\n'
-    p_macro = precision_score(test_answer,  pred_answer, average='macro')
-    r_macro = recall_score(test_answer,  pred_answer, average='macro')
-    result += "F-macro: " + str(2*p_macro*r_macro/(p_macro+r_macro)) + '\n'
-    result += "F-classes: " + str(f1_score(test_answer,  pred_answer, average=None)) + '\n'
-    return result
-
-
 def main(train, test, output, stemming=True, context_window=5, bow_ngrams=(1, 2), pos_ngrams=(1, 1), language='ru'):
     print("Preprocessing...")
     train_reviews, train_answer, train_additional_features, nlc_train_data, raw_train_reviews = \
@@ -209,28 +195,16 @@ def main(train, test, output, stemming=True, context_window=5, bow_ngrams=(1, 2)
                         "datasets/ABSA16_Restaurants_Ru_Test_NLC_Meta.csv",
                         context_window=context_window)
 
-    train_data = csr_matrix((len(train_reviews), 1))
-    test_data = csr_matrix((len(test_reviews), 1))
-
-    # TfIdf
-    print("TfIdf...")
-    bow_train_data, bow_test_data = bow(train_reviews, test_reviews, language='ru', stem=stemming, use_tfidf=True,
-                                        bow_ngrams=bow_ngrams)
-    train_data = hstack([train_data, bow_train_data])
-    test_data = hstack([test_data, bow_test_data])
-
-    # POS features
-    print("POS...")
-    pos_train_data = []
-    pos_test_data = []
-    for review in train_reviews:
-        pos_train_data.append(get_sentence_tags(review, language))
-    for review in test_reviews:
-        pos_test_data.append(get_sentence_tags(review, language))
-    pos_train_data, pos_test_data = bow(pos_train_data, pos_test_data, stem=False, use_tfidf=False,
-                                        bow_ngrams=pos_ngrams)
-    train_data = hstack([train_data, pos_train_data])
-    test_data = hstack([test_data, pos_test_data])
+    pipeline = Pipeline(train_reviews, test_reviews)
+    pipeline.add_step(BowFeaturesStep(language='ru', stem=stemming, tokenizer=text_to_wordlist, preprocessor=None,
+                                      use_tfidf=True, max_features=None, bow_ngrams=bow_ngrams))
+    pipeline.add_step(POSFeaturesStep(language='ru', stem=False, tokenizer=text_to_wordlist, preprocessor=None,
+                                      use_tfidf=False, max_features=None, pos_ngrams=pos_ngrams))
+    pipeline.add_step(RawFeaturesStep(train_additional_features, test_additional_features))
+    clf = LinearSVC(tol=0.1)
+    pipeline.add_step(CVStep(train_answer, clf, n=20, test_size=0.25, scoring=None, random_state=2016))
+    pipeline.add_step(EvaluateFMeasureStep(clf, train_answer, test_answer))
+    pipeline.run()
 
     # # Punctuation
     # print("Punctuation...")
@@ -239,11 +213,6 @@ def main(train, test, output, stemming=True, context_window=5, bow_ngrams=(1, 2)
     # train_data = hstack([train_data,  punct_train_data])
     # test_data = hstack([test_data,  punct_test_data])
 
-    # Category features
-    print("Category...")
-    train_data = hstack([train_data, train_additional_features])
-    test_data = hstack([test_data, test_additional_features])
-
     # # NLC
     # print("NLC...")
     # nlc_train_data, nlc_test_data = bow(nlc_train_data, nlc_test_data, stem=False, use_tfidf=False,
@@ -251,21 +220,7 @@ def main(train, test, output, stemming=True, context_window=5, bow_ngrams=(1, 2)
     # train_data = hstack([train_data, nlc_train_data])
     # test_data = hstack([test_data, nlc_test_data])
 
-    answer = run_single(train_data, test_data, train_answer, 201600)
-    # clf = LinearSVC(tol=0.1)
-    #
-    # print("CV...")
-    # cv = ShuffleSplit(train_data.shape[0], n_iter=20, test_size=0.25, random_state=10)
-    # scores = cross_val_score(clf, train_data, train_answer, cv=cv)
-    # print("Accuracy: %0.3f (+/- %0.3f)" % (scores.mean(), scores.std() * 2))
-    #
-    # print("Predicting on test...")
-    # clf.fit(train_data, train_answer)
-    # answer = clf.predict(test_data)
-
-    result = evaluate(test_answer, answer)
-    with open(output, 'w') as f:
-        f.write(result)
+    # answer = run_single(train_data, test_data, train_answer, 201600)
 
 main('datasets/ABSA16_Restaurants_Ru_Train.xml', 'datasets/ABSA16_Restaurants_Ru_Test.xml',
      "results/SemEval16RuRest/boosting.log", True, context_window=7)

@@ -1,7 +1,7 @@
 import copy
 
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
-from utils.preprocess import text_to_wordlist, stem_sentence, get_sentence_tags
+from utils.preprocess import text_to_wordlist, stem_sentence
 
 
 def bow(train_texts, test_texts, language='en', stem=False, tokenizer=text_to_wordlist, preprocessor=None,
