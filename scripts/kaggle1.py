@@ -19,7 +19,7 @@ def main():
     pipeline.add_step(BowFeaturesStep(language='en', stem=True, tokenizer=text_to_wordlist, preprocessor=preprocessor,
                                       use_tfidf=True, max_features=None, bow_ngrams=(1, 2)))
     pipeline.add_step(POSFeaturesStep(language='en', stem=False, tokenizer=text_to_wordlist, preprocessor=preprocessor,
-                                      use_tfidf=False, max_features=None, pos_ngrams=(1, 2)))
+                                      use_tfidf=False, max_features=None, pos_ngrams=(1, 1)))
     # pipeline.add_step(PunctuationStep(['?!?', '!?!', '))', ')))', '((', '(((', ':)', ':(']))
     clf = MultinomialNB(alpha=0.1)
     # forest = RandomForestClassifier(n_estimators=100)
