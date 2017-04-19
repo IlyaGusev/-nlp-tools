@@ -1,5 +1,6 @@
 import random
 import re
+import os
 import xml.etree.ElementTree as ET
 from collections import Counter
 
@@ -79,7 +80,16 @@ def get_opinion_borders(sentence):
         to_idx = int(opinion['to'])
         if from_idx != 0 or to_idx != 0:
             opinion_borders.append((from_idx, to_idx))
+        else:
+            opinion_borders.append((0, len(sentence['text'])))
     return opinion_borders
+
+
+def get_opinions(sentence):
+    opinions = []
+    for opinion in sentence['opinions']:
+        opinions.append(opinion)
+    return opinions
 
 
 def get_context(from_idx, to_idx, text, words_borders, opinion_borders, separator_borders, context_window):
@@ -87,12 +97,11 @@ def get_context(from_idx, to_idx, text, words_borders, opinion_borders, separato
 
     begin = -1
     end = -1
-    for i in range(len(words_borders)):
-        if from_idx >= words_borders[i][0] - 1 and begin == -1:
+    for i, border in enumerate(words_borders):
+        if border[0] >= from_idx and begin == -1:
             begin = i
-        if to_idx >= words_borders[i][1] - 1 and begin != -1:
+        if to_idx >= border[1] and begin != -1:
             end = i
-
     begin = 0 if begin - context_window < 0 else begin - context_window
     end = len(words) - 1 if end + context_window > len(words) - 1 else end + context_window
 
@@ -204,7 +213,7 @@ def preprocess_data_for_sentiment(data, nlc_filename=None, nlc_meta_filename=Non
     return reviews, sentiments, additional_features, nlc_data, raw_reviews
 
 
-def preprocess_data_for_aspects(data, context_window=5):
+def preprocess_data_for_aspect_category(data, context_window=5):
     reviews = []
     raw_reviews = []
     answers = []
@@ -218,21 +227,36 @@ def preprocess_data_for_aspects(data, context_window=5):
 
         separator_borders = get_separator_borders(text)
         opinion_borders = get_opinion_borders(sentence)
+        opinions = get_opinions(sentence)
         words_borders = get_word_borders(text)
 
-        for i, (word_begin, word_end) in enumerate(words_borders):
-            is_aspect = False
-            for opinion_begin, opinion_end in opinion_borders:
-                if word_begin >= opinion_begin and word_end <= opinion_end:
-                    is_aspect = True
-            context = get_context(word_begin, word_end, text, words_borders, opinion_borders,
-                                  separator_borders, context_window)
-            result = text_to_wordlist(context)
+        for i, opinion in enumerate(opinions):
+            from_idx = int(opinion['from'])
+            to_idx = int(opinion['to'])
+            context = text
+            if opinion['target'] != 'NULL':
+                context = get_context(from_idx, to_idx, text, words_borders, opinion_borders, separator_borders,
+                                      context_window)
+            result = " ".join(text_to_wordlist(context))
+            category = opinion['category']
             raw_reviews.append(context)
-            result = " ".join(result)
             reviews.append(result)
-            answers.append(is_aspect)
+            answers.append(category)
+
+        # for word_begin, word_end in words_borders:
+        #     context = get_context(word_begin, word_end, text, words_borders, opinion_borders,
+        #                           separator_borders, context_window)
+        #     result = text_to_wordlist(context)
+        #     result = " ".join(result)
+        #     for i, (opinion_begin, opinion_end) in enumerate(opinion_borders):
+        #         if word_begin >= opinion_begin and word_end <= opinion_end:
+        #             category = opinions[i]['category']
+        #             raw_reviews.append(context)
+        #             reviews.append(result)
+        #             answers.append(category)
         current_length += len(sentence['text']) + 1
+    answers_le = LabelEncoder()
+    answers = answers_le.fit_transform(answers)
     return reviews, raw_reviews, answers
 
 
@@ -264,14 +288,12 @@ def sentiment_pipeline(train_filename, test_filename, stemming=True, context_win
     # answer = run_single(train_data, test_data, train_answer, 201600)
 
 
-def aspect_pipeline(train_filename, test_filename, stemming=True, context_window=5, bow_ngrams=(1, 2), pos_ngrams=(1, 1)):
+def category_pipeline(train_filename, test_filename, stemming=True, context_window=5, bow_ngrams=(1, 2), pos_ngrams=(1, 1)):
     print("Preprocessing...")
     train_reviews, raw_train_reviews, train_answer = \
-        preprocess_data_for_aspects(semeval_get_data(train_filename), context_window=context_window)
+        preprocess_data_for_aspect_category(semeval_get_data(train_filename), context_window=context_window)
     test_reviews, raw_test_reviews, test_answer = \
-        preprocess_data_for_aspects(semeval_get_data(test_filename), context_window=context_window)
-
-    print([train_reviews[i] for i in range(len(train_reviews[:100])) if  train_answer[i] == True])
+        preprocess_data_for_aspect_category(semeval_get_data(test_filename), context_window=context_window)
 
     pipeline = Pipeline(train_reviews, test_reviews)
     pipeline.add_step(BowFeaturesStep(language='ru', stem=stemming, tokenizer=text_to_wordlist, preprocessor=None,
@@ -283,16 +305,10 @@ def aspect_pipeline(train_filename, test_filename, stemming=True, context_window
     pipeline.add_step(EvaluateFMeasureStep(clf, train_answer, test_answer))
     pipeline.run()
 
-    # # NLC
-    # print("NLC...")
-    # nlc_train_data, nlc_test_data = bow(nlc_train_data, nlc_test_data, stem=False, use_tfidf=False,
-    #                                     tokenizer=None, bow_ngrams=(1, 1))
-    # train_data = hstack([train_data, nlc_train_data])
-    # test_data = hstack([test_data, nlc_test_data])
-
-    # answer = run_single(train_data, test_data, train_answer, 201600)
-
 if __name__ == '__main__':
-    # sentiment_pipeline('datasets/ABSA16_Restaurants_Ru_Train.xml', 'datasets/ABSA16_Restaurants_Ru_Test.xml', True, context_window=7)
-    aspect_pipeline('datasets/ABSA16_Restaurants_Ru_Train.xml', 'datasets/ABSA16_Restaurants_Ru_Test.xml', True,
-                       context_window=7)
+    # sentiment_pipeline(os.path.join('datasets', 'ABSA16_Restaurants_Ru_Train.xml'),
+    #                    os.path.join('datasets', 'ABSA16_Restaurants_Ru_Test.xml'),
+    #                    True, context_window=7)
+    category_pipeline(os.path.join('datasets', 'ABSA16_Restaurants_Ru_Train.xml'),
+                      os.path.join('datasets', 'ABSA16_Restaurants_Ru_Test.xml'),
+                      True, context_window=0)

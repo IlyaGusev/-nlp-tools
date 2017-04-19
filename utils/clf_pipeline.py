@@ -115,9 +115,7 @@ class EvaluateFMeasureStep(object):
         answer = self.clf.predict(test_data)
         result = ""
         result += "Accuracy: " + str(accuracy_score(self.test_answer, answer)) + '\n'
-        p_macro = precision_score(self.test_answer, answer, average='macro')
-        r_macro = recall_score(self.test_answer, answer, average='macro')
-        result += "F-macro: " + str(2 * p_macro * r_macro / (p_macro + r_macro)) + '\n'
+        result += "F-macro: " + str(f1_score(self.test_answer, answer, average='macro')) + '\n'
         result += "F-classes: " + str(f1_score(self.test_answer, answer, average=None)) + '\n'
         print(result)
         return train_data, test_data
